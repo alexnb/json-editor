@@ -55,15 +55,18 @@ JSONEditor.Validator = Class.extend({
     // `enum`
     if(schema["enum"]) {
       valid = false;
-      for(i=0; i<schema["enum"].length; i++) {
-        if(stringified === JSON.stringify(schema["enum"][i])) valid = true;
-      }
-      if(!valid) {
-        errors.push({
-          path: path,
-          property: 'enum',
-          message: this.translate("error_enum")
-        });
+     // TODO new strings have quotes around them
+      if (!(schema.options && schema.options.selectize_options && schema.options.selectize_options.canCreate(stringified))) {
+        for(i=0; i<schema["enum"].length; i++) {
+          if(stringified === JSON.stringify(schema["enum"][i])) valid = true;
+        }
+        if(!valid) {
+          errors.push({
+            path: path,
+            property: 'enum',
+            message: this.translate("error_enum")
+          });
+        }
       }
     }
 
