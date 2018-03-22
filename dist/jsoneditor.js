@@ -1,8 +1,9 @@
-/*! JSON Editor v0.7.28 - JSON Schema -> HTML Editor
- * By Jeremy Dorn - https://github.com/jdorn/json-editor/
+/*! JSON Editor v0.7.28.1 - JSON Schema -> HTML Editor
+ * https://github.com/alexnb/json-editor.git
+ * Forked from https://github.com/jdorn/json-editor/ By Jeremy Dorn 
  * Released under the MIT license
  *
- * Date: 2016-08-07
+ * Date: 2018-03-22
  */
 
 /**
@@ -865,15 +866,18 @@ JSONEditor.Validator = Class.extend({
     // `enum`
     if(schema["enum"]) {
       valid = false;
-      for(i=0; i<schema["enum"].length; i++) {
-        if(stringified === JSON.stringify(schema["enum"][i])) valid = true;
-      }
-      if(!valid) {
-        errors.push({
-          path: path,
-          property: 'enum',
-          message: this.translate("error_enum")
-        });
+     // TODO new strings have quotes around them
+      if (!(schema.options && schema.options.selectize_options && schema.options.selectize_options.canCreate(stringified))) {
+        for(i=0; i<schema["enum"].length; i++) {
+          if(stringified === JSON.stringify(schema["enum"][i])) valid = true;
+        }
+        if(!valid) {
+          errors.push({
+            path: path,
+            property: 'enum',
+            message: this.translate("error_enum")
+          });
+        }
       }
     }
 
@@ -5173,14 +5177,27 @@ JSONEditor.defaults.editors.select = JSONEditor.AbstractEditor.extend({
 });
 
 JSONEditor.defaults.editors.selectize = JSONEditor.AbstractEditor.extend({
+  addOptionAndUpdate: function (newOption) {
+                                                                                 this.enum_options.push(newOption);
+                                                                                 this.enum_display.push(newOption);
+                                                                                 this.enum_values.push(newOption);
+                                                                                 if (this.selectize) {
+                                                                                     this.updateSelectizeOptions(this.enum_options);
+                                                                                 }
+  },
+
   setValue: function(value,initial) {
-    value = this.typecast(value||'');
+    var canAddNonEnumValues = this.schema.options && this.schema.options.selectize_options && this.schema.options.selectize_options.canCreate(value);
+    var valueIsFromEnum = this.enum_values.indexOf(value) >= 0;
 
     // Sanitize value before setting it
     var sanitized = value;
-    if(this.enum_values.indexOf(sanitized) < 0) {
-      sanitized = this.enum_values[0];
+    if (!valueIsFromEnum) {
+      if (canAddNonEnumValues) {
+        this.addOptionAndUpdate(sanitized);
+      }
     }
+
 
     if(this.value === sanitized) {
       return;
@@ -5194,6 +5211,13 @@ JSONEditor.defaults.editors.selectize = JSONEditor.AbstractEditor.extend({
 
     this.value = sanitized;
     this.onChange();
+  },
+  getDefault: function() {
+    if(this.schema["enum"]) {
+      return this.schema["default"];
+    } else {
+      this._super();
+    }
   },
   register: function() {
     this._super();
@@ -5347,21 +5371,24 @@ JSONEditor.defaults.editors.selectize = JSONEditor.AbstractEditor.extend({
 
     var sanitized = val;
     if(this.enum_options.indexOf(val) === -1) {
-      sanitized = this.enum_options[0];
+      if (val === "") {
+        this.value = undefined;
+      } else {
+        this.value = val;
+      }
+    } else {
+        this.value = this.enum_values[this.enum_options.indexOf(val)];
     }
 
-    this.value = this.enum_values[this.enum_options.indexOf(val)];
     this.onChange(true);
   },
   setupSelectize: function() {
-    // If the Selectize library is loaded use it when we have lots of items
     var self = this;
-    if(window.jQuery && window.jQuery.fn && window.jQuery.fn.selectize && (this.enum_options.length >= 2 || (this.enum_options.length && this.enumSource))) {
+    if(window.jQuery && window.jQuery.fn && window.jQuery.fn.selectize) {
       var options = $extend({},JSONEditor.plugins.selectize);
       if(this.schema.options && this.schema.options.selectize_options) options = $extend(options,this.schema.options.selectize_options);
       this.selectize = window.jQuery(this.input).selectize($extend(options,
       {
-        create: true,
         onChange : function() {
           self.onInputChange();
         }
@@ -5485,7 +5512,7 @@ JSONEditor.defaults.editors.selectize = JSONEditor.AbstractEditor.extend({
     selectized.off();
     selectized.clearOptions();
     for(var n in select_options) {
-      selectized.addOption({value:select_options[n],text:select_options[n]});
+      selectized.addOption({value:select_options[n],text:this.enum_display[n]});
     }
     selectized.addItem(this.value);
     selectized.on('change',function() {
